@@ -11,7 +11,7 @@ export const api = axios.create({
 })
 
 // --- Libros ---
-export const getLibros = () => api.get('/libros')
+export const getLibros = (buscar = '') => api.get('/libros', { params: buscar ? { buscar } : {} })
 export const getLibro = (id) => api.get(`/libros/${id}`)
 export const crearLibro = (data) => api.post('/libros', data)
 export const actualizarLibro = (id, data) => api.put(`/libros/${id}`, data)
@@ -30,3 +30,7 @@ export const getGenero = (id) => api.get(`/generos/${id}`)
 export const crearGenero = (data) => api.post('/generos', data)
 export const actualizarGenero = (id, data) => api.put(`/generos/${id}`, data)
 export const eliminarGenero = (id) => api.delete(`/generos/${id}`)
+
+// --- Ventas ---
+export const getVentas = () => api.get('/ventas')
+export const crearVenta = (data) => api.post('/ventas', data)

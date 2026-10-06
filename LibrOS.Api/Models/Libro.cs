@@ -11,10 +11,15 @@ public class Libro
     [MaxLength(200)]
     public string Titulo { get; set; } = string.Empty;
 
+    [MaxLength(20)]
+    public string? Isbn { get; set; }
+
     public int? AnioPublicacion { get; set; }
 
     [Column(TypeName = "decimal(10,2)")]
-    public decimal? Precio { get; set; }
+    public decimal Precio { get; set; } = 0;
+
+    public int Cantidad { get; set; } = 1;
 
     public int AutorId { get; set; }
     public Autor? Autor { get; set; }

@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   getLibros, crearLibro, actualizarLibro, eliminarLibro,
   getAutores, getGeneros
 } from '../api/client'
+import { formatoMoneda, mensajeError } from '../utils'
 
-const vacio = { titulo: '', anioPublicacion: '', precio: '', autorId: '', generoId: '' }
+const POR_PAGINA = 10
+
+const vacio = {
+  titulo: '', isbn: '', anioPublicacion: '', precio: '0', cantidad: '1', autorId: '', generoId: ''
+}
 
 export default function LibrosPage() {
   const [libros, setLibros] = useState([])
@@ -14,36 +19,84 @@ export default function LibrosPage() {
   const [editId, setEditId] = useState(null)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [buscar, setBuscar] = useState('')
+  const [orden, setOrden] = useState({ campo: 'titulo', dir: 'asc' })
+  const [pagina, setPagina] = useState(1)
 
-  const cargarTodo = async () => {
-    setCargando(true)
+  const cargarLibros = async () => {
     try {
-      const [resLibros, resAutores, resGeneros] = await Promise.all([
-        getLibros(), getAutores(), getGeneros()
-      ])
-      setLibros(resLibros.data)
-      setAutores(resAutores.data)
-      setGeneros(resGeneros.data)
+      const res = await getLibros(buscar.trim())
+      setLibros(res.data)
       setError('')
     } catch (err) {
-      setError('No se pudo cargar la información. Revisa que la API esté corriendo y que existan autores y géneros.')
+      setError(mensajeError(err, 'No se pudo cargar la lista de libros. Revisa que la API esté corriendo.'))
     } finally {
       setCargando(false)
     }
   }
 
-  useEffect(() => { cargarTodo() }, [])
+  // Catálogos de autores y géneros (una sola vez)
+  useEffect(() => {
+    Promise.all([getAutores(), getGeneros()])
+      .then(([a, g]) => { setAutores(a.data); setGeneros(g.data) })
+      .catch(() => setError('No se pudieron cargar autores y géneros.'))
+  }, [])
+
+  // Búsqueda con retraso de 300 ms para no consultar en cada tecla
+  useEffect(() => {
+    const t = setTimeout(cargarLibros, 300)
+    setPagina(1)
+    return () => clearTimeout(t)
+  }, [buscar])
+
+  const ordenados = useMemo(() => {
+    const copia = [...libros]
+    const { campo, dir } = orden
+    copia.sort((a, b) => {
+      const x = a[campo] ?? ''
+      const y = b[campo] ?? ''
+      const r = typeof x === 'number' && typeof y === 'number'
+        ? x - y
+        : String(x).localeCompare(String(y), 'es')
+      return dir === 'asc' ? r : -r
+    })
+    return copia
+  }, [libros, orden])
+
+  const totalPaginas = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA))
+  const paginaActual = Math.min(pagina, totalPaginas)
+  const visibles = ordenados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA)
+
+  const ordenarPor = (campo) => {
+    setOrden((o) =>
+      o.campo === campo
+        ? { campo, dir: o.dir === 'asc' ? 'desc' : 'asc' }
+        : { campo, dir: 'asc' })
+    setPagina(1)
+  }
+
+  const flecha = (campo) =>
+    orden.campo === campo ? (orden.dir === 'asc' ? ' ▲' : ' ▼') : ''
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const precio = form.precio === '' ? 0 : Number(form.precio)
+    const cantidad = form.cantidad === '' ? 1 : Number(form.cantidad)
+
+    if (cantidad < 0) { setError('La cantidad no puede ser negativa.'); return }
+    if (precio < 0) { setError('El precio no puede ser negativo.'); return }
+
+    const payload = {
+      titulo: form.titulo,
+      isbn: form.isbn.trim() || null,
+      anioPublicacion: form.anioPublicacion ? Number(form.anioPublicacion) : null,
+      precio,
+      cantidad,
+      autorId: Number(form.autorId),
+      generoId: Number(form.generoId)
+    }
+
     try {
-      const payload = {
-        titulo: form.titulo,
-        anioPublicacion: form.anioPublicacion ? Number(form.anioPublicacion) : null,
-        precio: form.precio ? Number(form.precio) : null,
-        autorId: Number(form.autorId),
-        generoId: Number(form.generoId)
-      }
       if (editId) {
         await actualizarLibro(editId, payload)
       } else {
@@ -51,9 +104,10 @@ export default function LibrosPage() {
       }
       setForm(vacio)
       setEditId(null)
-      cargarTodo()
+      setError('')
+      cargarLibros()
     } catch (err) {
-      setError('Error al guardar el libro. Verifica los datos.')
+      setError(mensajeError(err, 'Error al guardar el libro. Verifica los datos.'))
     }
   }
 
@@ -61,24 +115,27 @@ export default function LibrosPage() {
     setEditId(libro.id)
     setForm({
       titulo: libro.titulo,
+      isbn: libro.isbn ?? '',
       anioPublicacion: libro.anioPublicacion ?? '',
-      precio: libro.precio ?? '',
+      precio: libro.precio,
+      cantidad: libro.cantidad,
       autorId: libro.autorId,
       generoId: libro.generoId
     })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleEliminar = async (id) => {
     if (!confirm('¿Eliminar este libro?')) return
     try {
       await eliminarLibro(id)
-      cargarTodo()
+      cargarLibros()
     } catch (err) {
-      setError('No se pudo eliminar el libro.')
+      setError(mensajeError(err, 'No se pudo eliminar el libro.'))
     }
   }
 
-  const sinCatalogos = !cargando && (autores.length === 0 || generos.length === 0)
+  const sinCatalogos = autores.length === 0 || generos.length === 0
 
   return (
     <div>
@@ -92,13 +149,21 @@ export default function LibrosPage() {
         </p>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <label>
+      <form className="form-grid" onSubmit={handleSubmit}>
+        <label className="span-2">
           Título
           <input
             value={form.titulo}
             onChange={(e) => setForm({ ...form, titulo: e.target.value })}
             required
+          />
+        </label>
+        <label>
+          ISBN
+          <input
+            value={form.isbn}
+            maxLength={20}
+            onChange={(e) => setForm({ ...form, isbn: e.target.value })}
           />
         </label>
         <label>
@@ -114,8 +179,19 @@ export default function LibrosPage() {
           <input
             type="number"
             step="0.01"
+            min="0"
             value={form.precio}
             onChange={(e) => setForm({ ...form, precio: e.target.value })}
+          />
+        </label>
+        <label>
+          Cantidad en inventario
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={form.cantidad}
+            onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
           />
         </label>
         <label>
@@ -160,39 +236,81 @@ export default function LibrosPage() {
         </div>
       </form>
 
+      <div className="toolbar">
+        <input
+          type="search"
+          placeholder="Buscar por ISBN, nombre o palabra clave del título..."
+          value={buscar}
+          onChange={(e) => setBuscar(e.target.value)}
+        />
+      </div>
+
       {error && <p className="error">{error}</p>}
+
       {cargando ? (
         <p>Cargando...</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Id</th>
-              <th>Título</th>
-              <th>Autor</th>
-              <th>Género</th>
-              <th>Año</th>
-              <th>Precio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {libros.map((l) => (
-              <tr key={l.id}>
-                <td>{l.id}</td>
-                <td>{l.titulo}</td>
-                <td>{l.autorNombre || '-'}</td>
-                <td>{l.generoNombre || '-'}</td>
-                <td>{l.anioPublicacion || '-'}</td>
-                <td>{l.precio != null ? `$${l.precio}` : '-'}</td>
-                <td className="actions">
-                  <button className="btn-secondary" onClick={() => handleEditar(l)}>Editar</button>
-                  <button className="btn-danger" onClick={() => handleEliminar(l.id)}>Eliminar</button>
-                </td>
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th className="sortable" onClick={() => ordenarPor('titulo')}>Título{flecha('titulo')}</th>
+                <th className="sortable" onClick={() => ordenarPor('isbn')}>ISBN{flecha('isbn')}</th>
+                <th className="sortable" onClick={() => ordenarPor('autorNombre')}>Autor{flecha('autorNombre')}</th>
+                <th className="sortable" onClick={() => ordenarPor('generoNombre')}>Género{flecha('generoNombre')}</th>
+                <th className="sortable" onClick={() => ordenarPor('cantidad')}>Cantidad{flecha('cantidad')}</th>
+                <th className="sortable" onClick={() => ordenarPor('precio')}>Precio{flecha('precio')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visibles.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="muted">
+                    {buscar.trim()
+                      ? `No se encontraron coincidencias para "${buscar.trim()}".`
+                      : 'Aún no hay libros registrados.'}
+                  </td>
+                </tr>
+              ) : (
+                visibles.map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.titulo}</td>
+                    <td>{l.isbn || '-'}</td>
+                    <td>{l.autorNombre || '-'}</td>
+                    <td>{l.generoNombre || '-'}</td>
+                    <td>{l.cantidad}</td>
+                    <td>{formatoMoneda(l.precio)}</td>
+                    <td className="actions">
+                      <button className="btn-secondary" onClick={() => handleEditar(l)}>Editar</button>
+                      <button className="btn-danger" onClick={() => handleEliminar(l.id)}>Eliminar</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          {totalPaginas > 1 && (
+            <div className="pagination">
+              <button
+                className="btn-secondary"
+                disabled={paginaActual === 1}
+                onClick={() => setPagina(paginaActual - 1)}
+              >
+                Anterior
+              </button>
+              <span>Página {paginaActual} de {totalPaginas}</span>
+              <button
+                className="btn-secondary"
+                disabled={paginaActual === totalPaginas}
+                onClick={() => setPagina(paginaActual + 1)}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

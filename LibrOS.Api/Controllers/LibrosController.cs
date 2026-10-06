@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using LibrOS.Api.Data;
 using LibrOS.Api.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -16,23 +17,35 @@ public class LibrosController : ControllerBase
         _context = context;
     }
 
-    // GET: api/libros
+    private static readonly Expression<Func<Libro, LibroDto>> ADto = l => new LibroDto(
+        l.Id,
+        l.Titulo,
+        l.Isbn,
+        l.AnioPublicacion,
+        l.Precio,
+        l.Cantidad,
+        l.AutorId,
+        l.Autor != null ? l.Autor.Nombre : null,
+        l.GeneroId,
+        l.Genero != null ? l.Genero.Nombre : null);
+
+    // GET: api/libros?buscar=texto  (por ISBN o por palabra clave del título)
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<LibroDto>>> GetLibros()
+    public async Task<ActionResult<IEnumerable<LibroDto>>> GetLibros([FromQuery] string? buscar)
     {
-        var libros = await _context.Libros
-            .AsNoTracking()
-            .Include(l => l.Autor)
-            .Include(l => l.Genero)
-            .Select(l => new LibroDto(
-                l.Id,
-                l.Titulo,
-                l.AnioPublicacion,
-                l.Precio,
-                l.AutorId,
-                l.Autor != null ? l.Autor.Nombre : null,
-                l.GeneroId,
-                l.Genero != null ? l.Genero.Nombre : null))
+        var query = _context.Libros.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(buscar))
+        {
+            var texto = buscar.Trim();
+            query = query.Where(l =>
+                l.Titulo.Contains(texto) ||
+                (l.Isbn != null && l.Isbn.Contains(texto)));
+        }
+
+        var libros = await query
+            .OrderBy(l => l.Titulo)
+            .Select(ADto)
             .ToListAsync();
 
         return Ok(libros);
@@ -44,18 +57,8 @@ public class LibrosController : ControllerBase
     {
         var libro = await _context.Libros
             .AsNoTracking()
-            .Include(l => l.Autor)
-            .Include(l => l.Genero)
             .Where(l => l.Id == id)
-            .Select(l => new LibroDto(
-                l.Id,
-                l.Titulo,
-                l.AnioPublicacion,
-                l.Precio,
-                l.AutorId,
-                l.Autor != null ? l.Autor.Nombre : null,
-                l.GeneroId,
-                l.Genero != null ? l.Genero.Nombre : null))
+            .Select(ADto)
             .FirstOrDefaultAsync();
 
         if (libro is null) return NotFound();
@@ -66,17 +69,16 @@ public class LibrosController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<LibroDto>> PostLibro(LibroCreateDto dto)
     {
-        var autorExiste = await _context.Autores.AnyAsync(a => a.Id == dto.AutorId);
-        var generoExiste = await _context.Generos.AnyAsync(g => g.Id == dto.GeneroId);
-
-        if (!autorExiste) return BadRequest($"No existe un autor con Id {dto.AutorId}.");
-        if (!generoExiste) return BadRequest($"No existe un genero con Id {dto.GeneroId}.");
+        var error = await ValidarReferencias(dto, null);
+        if (error is not null) return error;
 
         var libro = new Libro
         {
             Titulo = dto.Titulo,
+            Isbn = string.IsNullOrWhiteSpace(dto.Isbn) ? null : dto.Isbn.Trim(),
             AnioPublicacion = dto.AnioPublicacion,
             Precio = dto.Precio,
+            Cantidad = dto.Cantidad,
             AutorId = dto.AutorId,
             GeneroId = dto.GeneroId
         };
@@ -84,12 +86,11 @@ public class LibrosController : ControllerBase
         _context.Libros.Add(libro);
         await _context.SaveChangesAsync();
 
-        var autor = await _context.Autores.FindAsync(dto.AutorId);
-        var genero = await _context.Generos.FindAsync(dto.GeneroId);
-
-        var resultado = new LibroDto(
-            libro.Id, libro.Titulo, libro.AnioPublicacion, libro.Precio,
-            libro.AutorId, autor?.Nombre, libro.GeneroId, genero?.Nombre);
+        var resultado = await _context.Libros
+            .AsNoTracking()
+            .Where(l => l.Id == libro.Id)
+            .Select(ADto)
+            .FirstAsync();
 
         return CreatedAtAction(nameof(GetLibro), new { id = libro.Id }, resultado);
     }
@@ -101,9 +102,14 @@ public class LibrosController : ControllerBase
         var libro = await _context.Libros.FindAsync(id);
         if (libro is null) return NotFound();
 
+        var error = await ValidarReferencias(dto, id);
+        if (error is not null) return error;
+
         libro.Titulo = dto.Titulo;
+        libro.Isbn = string.IsNullOrWhiteSpace(dto.Isbn) ? null : dto.Isbn.Trim();
         libro.AnioPublicacion = dto.AnioPublicacion;
         libro.Precio = dto.Precio;
+        libro.Cantidad = dto.Cantidad;
         libro.AutorId = dto.AutorId;
         libro.GeneroId = dto.GeneroId;
 
@@ -118,8 +124,36 @@ public class LibrosController : ControllerBase
         var libro = await _context.Libros.FindAsync(id);
         if (libro is null) return NotFound();
 
-        _context.Libros.Remove(libro);
-        await _context.SaveChangesAsync();
+        try
+        {
+            _context.Libros.Remove(libro);
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("No se puede eliminar el libro porque tiene ventas registradas.");
+        }
+
         return NoContent();
+    }
+
+    // Valida autor, género e ISBN duplicado. Devuelve null si todo está bien.
+    private async Task<ActionResult?> ValidarReferencias(LibroCreateDto dto, int? idActual)
+    {
+        if (!await _context.Autores.AnyAsync(a => a.Id == dto.AutorId))
+            return BadRequest($"No existe un autor con Id {dto.AutorId}.");
+
+        if (!await _context.Generos.AnyAsync(g => g.Id == dto.GeneroId))
+            return BadRequest($"No existe un género con Id {dto.GeneroId}.");
+
+        if (!string.IsNullOrWhiteSpace(dto.Isbn))
+        {
+            var isbn = dto.Isbn.Trim();
+            var duplicado = await _context.Libros
+                .AnyAsync(l => l.Isbn == isbn && l.Id != idActual);
+            if (duplicado) return Conflict($"Ya existe un libro con el ISBN {isbn}.");
+        }
+
+        return null;
     }
 }
