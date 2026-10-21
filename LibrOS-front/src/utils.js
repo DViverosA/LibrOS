@@ -12,3 +12,6 @@ export const mensajeError = (err, porDefecto) => {
   if (data?.errors) return Object.values(data.errors).flat().join(' ')
   return porDefecto
 }
+
+// Avisa al panel de alertas que vuelva a consultar (tras vender, editar stock, apartar...)
+export const refrescarAlertas = () => window.dispatchEvent(new Event('alertas:refrescar'))

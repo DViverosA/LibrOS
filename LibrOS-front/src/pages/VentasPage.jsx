@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getLibros, crearVenta } from '../api/client'
-import { formatoMoneda, mensajeError } from '../utils'
+import { getLibros, crearVenta, getClientes } from '../api/client'
+import { formatoMoneda, mensajeError, refrescarAlertas } from '../utils'
 
 export default function VentasPage() {
   const [libros, setLibros] = useState([])
+  const [clientes, setClientes] = useState([])
+  const [clienteId, setClienteId] = useState('')
   const [buscar, setBuscar] = useState('')
   const [carrito, setCarrito] = useState([])
   const [vendedor, setVendedor] = useState('')
@@ -21,6 +23,12 @@ export default function VentasPage() {
   }
 
   useEffect(() => { cargarLibros() }, [])
+
+  useEffect(() => {
+    getClientes()
+      .then((res) => setClientes(res.data))
+      .catch(() => {})
+  }, [])
 
   // Solo se pueden vender libros con stock y con precio definido
   const disponibles = useMemo(() => {
@@ -88,17 +96,25 @@ export default function VentasPage() {
 
     setEnviando(true)
     try {
-      const res = await crearVenta({
+      const respuesta = await crearVenta({
         vendedor: vendedor.trim(),
+        clienteId: clienteId ? Number(clienteId) : null,
         items: carrito.map((i) => ({ libroId: i.libroId, cantidad: i.cantidad }))
       })
-      setExito(`Venta #${res.data.id} registrada por ${formatoMoneda(res.data.total)}.`)
+
+      const venta = respuesta.data
+      setExito(
+        `Venta #${venta.id} registrada por ${formatoMoneda(venta.total)}` +
+        (venta.clienteNombre ? ` y vinculada al historial de ${venta.clienteNombre}.` : '.')
+      )
       setCarrito([])
+      setClienteId('')
     } catch (err) {
       setError(mensajeError(err, 'No se pudo registrar la venta.'))
     } finally {
       setEnviando(false)
-      cargarLibros() // refresca el stock mostrado
+      cargarLibros()      // refresca el stock mostrado
+      refrescarAlertas()  // actualiza el panel de alertas
     }
   }
 
@@ -118,84 +134,97 @@ export default function VentasPage() {
             placeholder="Escribe para buscar..."
           />
         </label>
-        <div className='table-wrap'>
-        <table>
-          <thead>
-            <tr>
-              <th>Título</th>
-              <th>Stock</th>
-              <th>Precio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {disponibles.length === 0 ? (
+
+        <div className="table-wrap">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={4} className="muted">
-                  No hay libros disponibles que coincidan (se necesita stock y precio mayor a 0).
-                </td>
+                <th>Título</th>
+                <th>Stock</th>
+                <th>Precio</th>
+                <th></th>
               </tr>
-            ) : (
-              disponibles.map((l) => (
-                <tr key={l.id}>
-                  <td>{l.titulo}</td>
-                  <td>{l.cantidad}</td>
-                  <td>{formatoMoneda(l.precio)}</td>
-                  <td>
-                    <button className="btn-primary" onClick={() => agregar(l)}>Agregar</button>
+            </thead>
+            <tbody>
+              {disponibles.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="muted">
+                    No hay libros disponibles que coincidan (se necesita stock y precio mayor a 0).
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                disponibles.map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.titulo}</td>
+                    <td>{l.cantidad}</td>
+                    <td>{formatoMoneda(l.precio)}</td>
+                    <td>
+                      <button className="btn-primary" onClick={() => agregar(l)}>Agregar</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div className="panel">
         <h2>Carrito</h2>
-        <div className='table-wrap'>
-        <table>
-          <thead>
-            <tr>
-              <th>Título</th>
-              <th>Precio</th>
-              <th>Cantidad</th>
-              <th>Subtotal</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {carrito.length === 0 ? (
+
+        <div className="table-wrap">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={5} className="muted">El carrito está vacío.</td>
+                <th>Título</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Subtotal</th>
+                <th></th>
               </tr>
-            ) : (
-              carrito.map((i) => (
-                <tr key={i.libroId}>
-                  <td>{i.titulo}</td>
-                  <td>{formatoMoneda(i.precio)}</td>
-                  <td>
-                    <input
-                      className="qty-input"
-                      type="number"
-                      min="1"
-                      max={i.stock}
-                      value={i.cantidad}
-                      onChange={(e) => cambiarCantidad(i.libroId, e.target.value)}
-                    />
-                  </td>
-                  <td>{formatoMoneda((Math.round(i.precio * 100) * i.cantidad) / 100)}</td>
-                  <td>
-                    <button className="btn-danger" onClick={() => quitar(i.libroId)}>Quitar</button>
-                  </td>
+            </thead>
+            <tbody>
+              {carrito.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="muted">El carrito está vacío.</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                carrito.map((i) => (
+                  <tr key={i.libroId}>
+                    <td>{i.titulo}</td>
+                    <td>{formatoMoneda(i.precio)}</td>
+                    <td>
+                      <input
+                        className="qty-input"
+                        type="number"
+                        min="1"
+                        max={i.stock}
+                        value={i.cantidad}
+                        onChange={(e) => cambiarCantidad(i.libroId, e.target.value)}
+                      />
+                    </td>
+                    <td>{formatoMoneda((Math.round(i.precio * 100) * i.cantidad) / 100)}</td>
+                    <td>
+                      <button className="btn-danger" onClick={() => quitar(i.libroId)}>Quitar</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+
         <div className="total">Total: {formatoMoneda(total)}</div>
+
+        <label>
+          Cliente frecuente (opcional)
+          <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+            <option value="">Sin cliente (mostrador)</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+        </label>
 
         <label>
           Vendedor
@@ -206,8 +235,8 @@ export default function VentasPage() {
           />
         </label>
 
-        {error && <p className="error">{error}</p>}
-        {exito && <p className="success">{exito}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+        {exito && <p className="success" role="status">{exito}</p>}
 
         <div className="actions">
           <button className="btn-primary" onClick={registrar} disabled={enviando}>

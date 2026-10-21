@@ -33,6 +33,7 @@ export default function HistorialPage() {
               <th>#</th>
               <th>Fecha</th>
               <th>Vendedor</th>
+              <th>Cliente</th>
               <th>Total</th>
               <th></th>
             </tr>
@@ -40,7 +41,7 @@ export default function HistorialPage() {
           <tbody>
             {ventas.length === 0 ? (
               <tr>
-                <td colSpan={5} className="muted">Aún no hay ventas registradas.</td>
+                <td colSpan={6} className="muted">Aún no hay ventas registradas.</td>
               </tr>
             ) : (
               ventas.map((v) => (
@@ -49,6 +50,7 @@ export default function HistorialPage() {
                     <td>{v.id}</td>
                     <td>{formatoFecha(v.fecha)}</td>
                     <td>{v.vendedor}</td>
+                    <td>{v.clienteNombre || 'Mostrador'}</td>
                     <td>{formatoMoneda(v.total)}</td>
                     <td>
                       <button
@@ -63,7 +65,7 @@ export default function HistorialPage() {
                     v.detalles.map((d) => (
                       <tr key={`${v.id}-${d.libroId}`} className="detalle">
                         <td></td>
-                        <td colSpan={2}>{d.titulo}</td>
+                        <td colSpan={3}>{d.titulo}</td>
                         <td colSpan={2}>
                           {d.cantidad} × {formatoMoneda(d.precioUnitario)} = {formatoMoneda(d.subtotal)}
                         </td>

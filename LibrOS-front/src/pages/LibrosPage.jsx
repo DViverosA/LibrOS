@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   getLibros, crearLibro, actualizarLibro, eliminarLibro,
   getAutores, getGeneros
 } from '../api/client'
-import { formatoMoneda, mensajeError } from '../utils'
+import { formatoMoneda, mensajeError, refrescarAlertas } from '../utils'
 import MultiSelect from '../components/MultiSelect.jsx'
 
 const POR_PAGINA = 10
 
 const vacio = {
   titulo: '', isbn: '', anioPublicacion: '', precio: '0', cantidad: '1',
-  autorIds: [], generoIds: []
+  stockMinimo: '0', autorIds: [], generoIds: []
 }
 
 const nombres = (lista) => lista.map((x) => x.nombre).join(', ')
+
+const bajoMinimo = (libro) => libro.stockMinimo > 0 && libro.cantidad < libro.stockMinimo
 
 const valorOrden = (libro, campo) => {
   if (campo === 'autores') return nombres(libro.autores)
@@ -29,6 +32,7 @@ export default function LibrosPage() {
   const [editId, setEditId] = useState(null)
   const [error, setError] = useState('')
   const [exito, setExito] = useState('')
+  const [apartadosListos, setApartadosListos] = useState([])
   const [cargando, setCargando] = useState(true)
   const [buscar, setBuscar] = useState('')
   const [filtroAutor, setFiltroAutor] = useState('')
@@ -112,12 +116,15 @@ export default function LibrosPage() {
       return 'La cantidad debe ser un número entero y no puede ser negativa.'
     if (form.precio !== '' && Number(form.precio) < 0)
       return 'El precio no puede ser negativo.'
+    if (form.stockMinimo !== '' && (!Number.isInteger(Number(form.stockMinimo)) || Number(form.stockMinimo) < 0))
+      return 'El stock mínimo debe ser un número entero y no puede ser negativo.'
     return ''
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setExito('')
+    setApartadosListos([])
 
     const problema = validar()
     if (problema) { setError(problema); return }
@@ -128,13 +135,15 @@ export default function LibrosPage() {
       anioPublicacion: form.anioPublicacion ? Number(form.anioPublicacion) : null,
       precio: form.precio === '' ? 0 : Number(form.precio),
       cantidad: form.cantidad === '' ? 1 : Number(form.cantidad),
+      stockMinimo: form.stockMinimo === '' ? 0 : Number(form.stockMinimo),
       autorIds: form.autorIds,
       generoIds: form.generoIds
     }
 
     try {
       if (editId) {
-        await actualizarLibro(editId, payload)
+        const res = await actualizarLibro(editId, payload)
+        setApartadosListos(res.data?.apartadosAtendibles ?? [])
         setExito('Libro actualizado correctamente.')
       } else {
         await crearLibro(payload)
@@ -144,6 +153,7 @@ export default function LibrosPage() {
       setEditId(null)
       setError('')
       cargarLibros()
+      refrescarAlertas()
     } catch (err) {
       setError(mensajeError(err, 'Error al guardar el libro. Verifica los datos.'))
     }
@@ -153,12 +163,14 @@ export default function LibrosPage() {
     setEditId(libro.id)
     setError('')
     setExito('')
+    setApartadosListos([])
     setForm({
       titulo: libro.titulo,
       isbn: libro.isbn ?? '',
       anioPublicacion: libro.anioPublicacion ?? '',
       precio: libro.precio,
       cantidad: libro.cantidad,
+      stockMinimo: libro.stockMinimo,
       autorIds: libro.autores.map((a) => a.id),
       generoIds: libro.generos.map((g) => g.id)
     })
@@ -174,9 +186,11 @@ export default function LibrosPage() {
   const handleEliminar = async (id) => {
     if (!confirm('¿Eliminar este libro?')) return
     setExito('')
+    setApartadosListos([])
     try {
       await eliminarLibro(id)
       cargarLibros()
+      refrescarAlertas()
     } catch (err) {
       setError(mensajeError(err, 'No se pudo eliminar el libro.'))
     }
@@ -241,6 +255,16 @@ export default function LibrosPage() {
             onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
           />
         </label>
+        <label>
+          Stock mínimo (0 = sin alerta)
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={form.stockMinimo}
+            onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })}
+          />
+        </label>
         <MultiSelect
           className="span-2"
           etiqueta="Autores"
@@ -271,6 +295,24 @@ export default function LibrosPage() {
 
       {error && <p className="error" role="alert">{error}</p>}
       {exito && <p className="success" role="status">{exito}</p>}
+
+      {apartadosListos.length > 0 && (
+        <div className="alerta alerta-apartado" role="alert">
+          <strong>
+            Con este stock ya se puede cumplir{' '}
+            {apartadosListos.length === 1 ? 'un apartado' : `${apartadosListos.length} apartados`}:
+          </strong>
+          <ul>
+            {apartadosListos.map((a) => (
+              <li key={a.id}>
+                <b>{a.clienteNombre}</b> espera "{a.libroTitulo}" (x{a.cantidad}).
+                Contacto: {[a.clienteTelefono, a.clienteEmail].filter(Boolean).join(' · ')}
+              </li>
+            ))}
+          </ul>
+          <Link to="/apartados">Ir a Apartados</Link>
+        </div>
+      )}
 
       <div className="toolbar">
         <input
@@ -333,17 +375,20 @@ export default function LibrosPage() {
                     </td>
                   </tr>
                 ) : (
-                  visibles.map((l) => (
-                    <tr key={l.id}>
-                      <td>{l.titulo}</td>
-                      <td>{l.isbn || '-'}</td>
-                      <td>{nombres(l.autores) || '-'}</td>
-                      <td>{nombres(l.generos) || '-'}</td>
-                      <td>{l.cantidad}</td>
-                      <td>{formatoMoneda(l.precio)}</td>
+                  visibles.map((libro) => (
+                    <tr key={libro.id} className={bajoMinimo(libro) ? 'fila-alerta' : ''}>
+                      <td>{libro.titulo}</td>
+                      <td>{libro.isbn || '-'}</td>
+                      <td>{nombres(libro.autores) || '-'}</td>
+                      <td>{nombres(libro.generos) || '-'}</td>
+                      <td className={bajoMinimo(libro) ? 'stock-bajo' : ''}>
+                        {libro.cantidad}{' '}
+                        {bajoMinimo(libro) && <span className="badge badge-rojo">Reabastecer</span>}
+                      </td>
+                      <td>{formatoMoneda(libro.precio)}</td>
                       <td className="actions">
-                        <button className="btn-secondary" onClick={() => handleEditar(l)}>Editar</button>
-                        <button className="btn-danger" onClick={() => handleEliminar(l.id)}>Eliminar</button>
+                        <button className="btn-secondary" onClick={() => handleEditar(libro)}>Editar</button>
+                        <button className="btn-danger" onClick={() => handleEliminar(libro.id)}>Eliminar</button>
                       </td>
                     </tr>
                   ))

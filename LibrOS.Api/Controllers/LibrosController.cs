@@ -1,8 +1,9 @@
-using System.Linq.Expressions;
 using LibrOS.Api.Data;
 using LibrOS.Api.Models;
+using LibrOS.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace LibrOS.Api.Controllers;
 
@@ -24,6 +25,7 @@ public class LibrosController : ControllerBase
         l.AnioPublicacion,
         l.Precio,
         l.Cantidad,
+        l.StockMinimo,
         l.Autores.OrderBy(a => a.Nombre).Select(a => new EtiquetaDto(a.Id, a.Nombre)).ToList(),
         l.Generos.OrderBy(g => g.Nombre).Select(g => new EtiquetaDto(g.Id, g.Nombre)).ToList());
 
@@ -86,6 +88,7 @@ public class LibrosController : ControllerBase
             AnioPublicacion = dto.AnioPublicacion,
             Precio = dto.Precio,
             Cantidad = dto.Cantidad,
+            StockMinimo = dto.StockMinimo,
             Autores = await _context.Autores.Where(a => dto.AutorIds.Contains(a.Id)).ToListAsync(),
             Generos = await _context.Generos.Where(g => dto.GeneroIds.Contains(g.Id)).ToListAsync()
         };
@@ -120,6 +123,7 @@ public class LibrosController : ControllerBase
         libro.AnioPublicacion = dto.AnioPublicacion;
         libro.Precio = dto.Precio;
         libro.Cantidad = dto.Cantidad;
+        libro.StockMinimo = dto.StockMinimo;
 
         libro.Autores.Clear();
         libro.Autores.AddRange(await _context.Autores.Where(a => dto.AutorIds.Contains(a.Id)).ToListAsync());
@@ -127,7 +131,23 @@ public class LibrosController : ControllerBase
         libro.Generos.AddRange(await _context.Generos.Where(g => dto.GeneroIds.Contains(g.Id)).ToListAsync());
 
         await _context.SaveChangesAsync();
-        return NoContent();
+
+        // HU13-02: si entró stock, los apartados pendientes pasan a Disponible
+        await ApartadoNotificador.MarcarDisponiblesAsync(_context, libro.Id);
+
+        // HU13 C2: apartados de este libro que ya se pueden atender
+        var atendibles = await _context.Apartados.AsNoTracking()
+            .Where(a => a.LibroId == libro.Id && a.Estado == EstadoApartado.Disponible)
+            .OrderBy(a => a.FechaAviso)
+            .Select(ApartadosController.ADto)
+            .ToListAsync();
+
+        var actualizado = await _context.Libros.AsNoTracking()
+            .Where(l => l.Id == libro.Id)
+            .Select(ADto)
+            .FirstAsync();
+
+        return Ok(new LibroActualizadoDto(actualizado, atendibles));
     }
 
     // DELETE: api/libros/5
@@ -144,7 +164,7 @@ public class LibrosController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("No se puede eliminar el libro porque tiene ventas registradas.");
+            return Conflict("No se puede eliminar el libro porque tiene ventas o apartados registrados.");
         }
 
         return NoContent();

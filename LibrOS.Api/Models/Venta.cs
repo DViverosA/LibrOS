@@ -13,6 +13,9 @@ public class Venta
     [MaxLength(100)]
     public string Vendedor { get; set; } = string.Empty;
 
+    public int? ClienteId { get; set; }
+    public Cliente? Cliente { get; set; }
+
     [Column(TypeName = "decimal(12,2)")]
     public decimal Total { get; set; }
 

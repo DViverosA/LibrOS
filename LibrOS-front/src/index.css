@@ -345,3 +345,72 @@ td.actions button + button {
 .chip button:hover {
   background: rgba(0, 0, 0, 0.1);
 }
+
+/* Alertas */
+.alertas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.alerta {
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  border-left: 5px solid;
+  font-size: 0.9rem;
+}
+
+.alerta ul {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.alerta a {
+  font-weight: 600;
+}
+
+.alerta-apartado {
+  background: #e8f7ee;
+  border-color: #248a3d;
+}
+
+.alerta-stock {
+  background: #fff4e0;
+  border-color: #d98200;
+}
+
+/* Etiquetas de estado */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-verde { background: #e8f7ee; color: #1b6e31; }
+.badge-ambar { background: #fff4e0; color: #9a5b00; }
+.badge-rojo  { background: #fdeaea; color: #b3261e; }
+.badge-gris  { background: #ececf0; color: #55555c; }
+
+tr.fila-lista td {
+  background: #f1fbf4;
+}
+
+td.stock-bajo {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+/* Filtros con etiqueta en línea */
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+tr.fila-alerta td {
+  background: #fff6f5;
+}

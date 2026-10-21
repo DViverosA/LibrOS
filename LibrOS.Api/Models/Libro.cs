@@ -21,6 +21,8 @@ public class Libro
 
     public int Cantidad { get; set; } = 1;
 
+    public int StockMinimo { get; set; } = 0;
+
     public List<Autor> Autores { get; set; } = new();
     public List<Genero> Generos { get; set; } = new();
 }

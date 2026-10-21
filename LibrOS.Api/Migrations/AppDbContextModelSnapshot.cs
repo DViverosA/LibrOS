@@ -52,6 +52,43 @@ namespace LibrOS.Api.Migrations
                     b.ToTable("GeneroLibro");
                 });
 
+            modelBuilder.Entity("LibrOS.Api.Models.Apartado", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FechaAviso")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LibroId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("LibroId", "Estado");
+
+                    b.ToTable("Apartados");
+                });
+
             modelBuilder.Entity("LibrOS.Api.Models.Autor", b =>
                 {
                     b.Property<int>("Id")
@@ -72,6 +109,35 @@ namespace LibrOS.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Autores");
+                });
+
+            modelBuilder.Entity("LibrOS.Api.Models.Cliente", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("FechaRegistro")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Telefono")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Clientes");
                 });
 
             modelBuilder.Entity("LibrOS.Api.Models.Genero", b =>
@@ -113,6 +179,9 @@ namespace LibrOS.Api.Migrations
                     b.Property<decimal>("Precio")
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<int>("StockMinimo")
+                        .HasColumnType("int");
+
                     b.Property<string>("Titulo")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -135,6 +204,9 @@ namespace LibrOS.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ClienteId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("Fecha")
                         .HasColumnType("datetime2");
 
@@ -147,6 +219,8 @@ namespace LibrOS.Api.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
 
                     b.HasIndex("Fecha");
 
@@ -213,6 +287,35 @@ namespace LibrOS.Api.Migrations
                         .HasForeignKey("LibrosId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("LibrOS.Api.Models.Apartado", b =>
+                {
+                    b.HasOne("LibrOS.Api.Models.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LibrOS.Api.Models.Libro", "Libro")
+                        .WithMany()
+                        .HasForeignKey("LibroId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cliente");
+
+                    b.Navigation("Libro");
+                });
+
+            modelBuilder.Entity("LibrOS.Api.Models.Venta", b =>
+                {
+                    b.HasOne("LibrOS.Api.Models.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Cliente");
                 });
 
             modelBuilder.Entity("LibrOS.Api.Models.VentaDetalle", b =>

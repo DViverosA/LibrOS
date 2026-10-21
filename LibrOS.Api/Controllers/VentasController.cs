@@ -18,16 +18,18 @@ public class VentasController : ControllerBase
 
     private IQueryable<VentaDto> ProyectarVentas(IQueryable<Venta> query) =>
         query.Select(v => new VentaDto(
-            v.Id,
-            v.Fecha,
-            v.Vendedor,
-            v.Total,
-            v.Detalles.Select(d => new VentaDetalleDto(
-                d.LibroId,
-                d.Libro!.Titulo,
-                d.Cantidad,
-                d.PrecioUnitario,
-                d.Subtotal)).ToList()));
+       v.Id,
+       v.Fecha,
+       v.Vendedor,
+       v.Total,
+       v.ClienteId,
+       v.Cliente != null ? v.Cliente.Nombre : null,
+       v.Detalles.Select(d => new VentaDetalleDto(
+           d.LibroId,
+           d.Libro!.Titulo,
+           d.Cantidad,
+           d.PrecioUnitario,
+           d.Subtotal)).ToList()));
 
     // GET: api/ventas  (historial, más reciente primero)
     [HttpGet]
@@ -68,7 +70,10 @@ public class VentasController : ControllerBase
             .Where(l => ids.Contains(l.Id))
             .ToDictionaryAsync(l => l.Id);
 
-        var venta = new Venta { Vendedor = dto.Vendedor.Trim(), Fecha = DateTime.Now };
+        if (dto.ClienteId.HasValue && !await _context.Clientes.AnyAsync(c => c.Id == dto.ClienteId.Value))
+            return BadRequest($"No existe un cliente con Id {dto.ClienteId}.");
+
+        var venta = new Venta { Vendedor = dto.Vendedor.Trim(), Fecha = DateTime.Now, ClienteId = dto.ClienteId };
 
         foreach (var item in items)
         {

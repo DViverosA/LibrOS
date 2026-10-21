@@ -40,3 +40,29 @@ export const eliminarGenero = (id) => api.delete(`/generos/${id}`)
 // --- Ventas ---
 export const getVentas = () => api.get('/ventas')
 export const crearVenta = (data) => api.post('/ventas', data)
+
+// --- Clientes ---
+export const getClientes = (buscar = '') =>
+  api.get('/clientes', { params: buscar ? { buscar } : {} })
+export const crearCliente = (data) => api.post('/clientes', data)
+export const actualizarCliente = (id, data) => api.put(`/clientes/${id}`, data)
+export const eliminarCliente = (id) => api.delete(`/clientes/${id}`)
+export const getHistorialCliente = (id) => api.get(`/clientes/${id}/historial`)
+
+// --- Reportes ---
+export const getMasVendidos = (filtros = {}) => {
+  const params = { top: filtros.top || 10 }
+  if (filtros.desde) params.desde = filtros.desde
+  if (filtros.hasta) params.hasta = filtros.hasta
+  return api.get('/reportes/mas-vendidos', { params })
+}
+
+// --- Apartados ---
+export const getApartados = (estado = '') =>
+  api.get('/apartados', { params: estado ? { estado } : {} })
+export const crearApartado = (data) => api.post('/apartados', data)
+export const entregarApartado = (id) => api.put(`/apartados/${id}/entregar`)
+export const cancelarApartado = (id) => api.put(`/apartados/${id}/cancelar`)
+
+// --- Alertas ---
+export const getAlertas = () => api.get('/alertas')

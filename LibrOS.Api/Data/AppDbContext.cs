@@ -12,6 +12,8 @@ public class AppDbContext : DbContext
     public DbSet<Genero> Generos => Set<Genero>();
     public DbSet<Venta> Ventas => Set<Venta>();
     public DbSet<VentaDetalle> VentaDetalles => Set<VentaDetalle>();
+    public DbSet<Cliente> Clientes => Set<Cliente>();
+    public DbSet<Apartado> Apartados => Set<Apartado>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +52,32 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Venta>()
             .HasIndex(v => v.Fecha);
+
+        modelBuilder.Entity<Venta>()
+            .HasOne(v => v.Cliente)
+            .WithMany()
+            .HasForeignKey(v => v.ClienteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Apartado>()
+            .HasOne(a => a.Cliente)
+            .WithMany()
+            .HasForeignKey(a => a.ClienteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Apartado>()
+            .HasOne(a => a.Libro)
+            .WithMany()
+            .HasForeignKey(a => a.LibroId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Apartado>()
+            .Property(a => a.Estado)
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
+        modelBuilder.Entity<Apartado>()
+            .HasIndex(a => new { a.LibroId, a.Estado });
 
         base.OnModelCreating(modelBuilder);
     }
